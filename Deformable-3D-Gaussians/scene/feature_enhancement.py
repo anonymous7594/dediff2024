@@ -9,15 +9,15 @@ from utils.general_utils import get_expon_lr_func
 gpu = 0
 os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu) #if not self.args.use_multi_gpu else self.args.devices
 device = torch.device('cuda:{}'.format(gpu))
-
+    
 class FeatureEnhancement:
     def __init__(self):
         self.dm_latent = DiffusionModelLatent().to(device)
         self.optimizer = None
         self.spatial_lr_scale = 5
 
-    def step(self, features_before, features_after, time_dim): #, d_xyz_current):
-        return self.dm_latent(features_before, features_after, time_dim)
+    def step(self, features_before, features_after, time_dim, viewpoint_cam): #, d_xyz_current):
+        return self.dm_latent(features_before, features_after, time_dim, viewpoint_cam)
 
     def train_setting(self, training_args):
         #fixed_lr = 0.01

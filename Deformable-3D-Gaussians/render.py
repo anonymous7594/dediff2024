@@ -49,7 +49,7 @@ def render_set(model_path, load2gpu_on_the_fly, is_6dof, name, iteration, views,
     frame_number = 0
     total_frame = len(views)
     #print('Lenght of views: ',len(views))
-    h = 5 ### <--------------------------------------------------------------------------------------------------------------- MANUALLY UPDATED
+    h = 10 ### <--------------------------------------------------------------------------------------------------------------- MANUALLY UPDATED
 
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
         # Previous key frame
@@ -107,22 +107,23 @@ def render_set(model_path, load2gpu_on_the_fly, is_6dof, name, iteration, views,
             
         ## Prediction
         if using_latent:
+            '''
             # using key frames only
             #print('USING LATENT............... SUCCESSFULLY')
             latent_dict = torch.load(os.path.join(args.model_path, "latent_dict.pth"))
             new_feature_latent_data = latent_dict[f'key_frame_{key_frame_before}_and_key_frame_{key_frame_after}']
             new_feature_latent_data = new_feature_latent_data.to(device)
             #print('LOADING LATENT DATA..................SUCCESSFULLY')
-            
+            '''
+
             new_feature_latent_data_all = torch.load(os.path.join(args.model_path, "latent_dict_compiled.pth"))
             new_feature_latent_data_all = new_feature_latent_data_all.to(device)
             
-            '''
             # using all frames
             latent_dict = torch.load(os.path.join(args.model_path, "latent_dict.pth"))
             new_feature_latent_data = latent_dict[f'frame_{frame_number}']
             #print(new_feature_latent_data.size())
-            '''
+            
         else:
             new_feature_latent_data = torch.tensor([]).to(device)
             #print('NO LATENT DATA..................SUCCESSFULLY')

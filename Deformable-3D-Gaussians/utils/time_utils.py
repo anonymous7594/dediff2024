@@ -11,7 +11,7 @@ import os
 import torchvision.transforms as transforms
 from transformers import CLIPProcessor, CLIPModel
 from diffusers import StableDiffusionXLImg2ImgPipeline
-
+import math
 
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -69,7 +69,7 @@ class Embedder:
 
 
 class DeformNetwork(nn.Module):
-    def __init__(self, D=4, W=32, input_ch=3, output_ch=59, multires=10, is_blender=False, is_6dof=False):  #D=8,W=256
+    def __init__(self, D=8, W=64, input_ch=3, output_ch=59, multires=10, is_blender=False, is_6dof=False):  #D=8,W=256
         super(DeformNetwork, self).__init__()
         self.D = D
         self.W = W
@@ -152,10 +152,69 @@ class TimeFeatureEmbedding(nn.Module):
         #x = self.elu(x)
         #x = np.concatenate((x,x_vab),axis=2)
         return self.embed(x)
-    
-## Feature Enhancement
+
+
+'''    
+ Feature Enhancement
+'''
+class CameraPoseEmbedding(nn.Module):
+    def __init__(self, input_dim=37, output_dim=1280):
+        super(CameraPoseEmbedding, self).__init__()
+        self.fc_prompt = nn.Linear(input_dim, output_dim)
+        self.fc_pooled_prompt = nn.Linear(input_dim, output_dim)
+
+    def forward(self, camera_center, world_view_transform, full_proj_transform, fovx, fovy):
+        ## Image Prompt Embedding
+        # Flatten the [4, 4] tensors to [16]
+        world_view_flat = world_view_transform.reshape(-1)  # [16]
+        proj_transform_flat = full_proj_transform.reshape(-1)  # [16]
+
+        # Concatenate all the components
+        pose_vector = torch.cat([
+            camera_center,              # [3]
+            world_view_flat,            # [16]
+            proj_transform_flat,        # [16]
+            fovx.view(-1),              # [1]
+            fovy.view(-1)               # [1]
+        ], dim=-1)  # [37]
+
+        # Map to the desired size [1280]
+        embedded_pose = self.fc_prompt(pose_vector)  # [1280]
+
+        # Repeat or reshape to match [1, 77, 1280]
+        embedded_pose = embedded_pose.unsqueeze(0).repeat(77, 1)  # [77, 1280]
+
+        # Add batch dimension [1, 77, 1280]
+        embedded_pose = embedded_pose.unsqueeze(0)  # [1, 77, 1280]
+
+        ## Pooled Image Prompt Embedding
+        # Flatten the [4, 4] tensors to [16]
+        world_view_flat = world_view_transform.reshape(-1)  # [16]
+        proj_transform_flat = full_proj_transform.reshape(-1)  # [16]
+
+        # Convert FoVx and FoVy to tensors if they are floats
+        #fovx_tensor = torch.tensor([fovx], dtype=torch.float32)
+        #fovy_tensor = torch.tensor([fovy], dtype=torch.float32)
+
+        # Concatenate all components into a single vector
+        pose_vector = torch.cat([
+            camera_center,              # [3]
+            world_view_flat,            # [16]
+            proj_transform_flat,        # [16]
+            fovx.view(-1),                # [1]
+            fovy.view(-1)                 # [1]
+        ], dim=-1)  # [37]
+
+        # Map to the desired size [1280]
+        embedded_pose_pooled = self.fc_pooled_prompt(pose_vector)  # [1280]
+
+        # Add batch dimension [1, 1280]
+        embedded_pose_pooled = embedded_pose_pooled.unsqueeze(0)  # [1, 1280]
+
+        return embedded_pose, embedded_pose_pooled
+
 class DiffusionModelLatent(nn.Module):
-    def __init__(self, input_size=768, output_size=1280):
+    def __init__(self, input_size=768, output_size=1280): ###-------------------------------------------------------------------------------------------------------------------> Manually Input
         super(DiffusionModelLatent, self).__init__()
         self.input_size = input_size
         self.output_size = output_size
@@ -172,8 +231,15 @@ class DiffusionModelLatent(nn.Module):
         self.linear_layer = nn.Linear(768, 1280).to(device)
         ## final_pooled_image_embedding
         self.pooled_linear_layer = nn.Linear(768, 1280).to(device)
+
+        ### Additonal Embedding
         self.temporal_embed = nn.Linear(1, output_size, bias=False).to(device)
-    def forward(self, features_before, features_after, time_dim):
+        self.camera_pose_embed = CameraPoseEmbedding(input_dim=37, output_dim=1280) ###-------------------------------------------------------------------------------------------> Manually Input
+
+
+
+    def forward(self, features_before, features_after, time_dim #):
+                ,viewpoint_cam):
     #def forward(self, features_before, features_after,time_start,time_end,num_frames):
         ### IF USING STABLE DIFFUSION
         # Process the image
@@ -209,23 +275,36 @@ class DiffusionModelLatent(nn.Module):
         # Apply the linear layer to transform the feature dimension
         final_image_embedding = self.linear_layer(final_image_embedding)
         final_pooled_image_embedding = self.pooled_linear_layer(pooled_image_embed_2)
+        # Temporal embedding
         pooled_time_embedding = self.temporal_embed(time_dim) #for pooled image embedding with 2 dims
-        time_embedding = pooled_time_embedding.unsqueeze(0) #for image embedding with 3 dims
+        time_embedding = pooled_time_embedding.unsqueeze(0) #for image embedding with 3 
+        
+        # Camera Pose embedding
+        camera_center = viewpoint_cam.camera_center
+        world_view_transform = viewpoint_cam.world_view_transform
+        full_proj_transform = viewpoint_cam.full_proj_transform
+        fovx = torch.tensor(math.tan(viewpoint_cam.FoVx * 0.5),device=device)
+        fovy = torch.tensor(math.tan(viewpoint_cam.FoVy * 0.5),device=device)
+        camera_pose_embedding, pooled_camera_pose_embedding = self.camera_pose_embed(camera_center, world_view_transform, full_proj_transform, fovx, fovy)
+        
         ## Apply Diffusion 
-        #with torch.no_grad():
+        with torch.no_grad():
             #image_latent_data = self.pipe_dm(prompt_embeds = final_image_embedding, pooled_prompt_embeds = final_pooled_image_embedding,  
             #                             image=features_before, output_type="latent",num_inference_steps=50).images[0] #currently using Preceeding Image
-        image_latent_data = self.pipe_dm(prompt_embeds = final_image_embedding + time_embedding, pooled_prompt_embeds = final_pooled_image_embedding + pooled_time_embedding,  
-                                         image=features_before, output_type="latent",num_inference_steps=50).images[0] #currently using Preceeding Image
+            image_latent_data = self.pipe_dm(prompt_embeds = final_image_embedding + time_embedding + camera_pose_embedding, #+ camera_pose_embedding, 
+                                             pooled_prompt_embeds = final_pooled_image_embedding + pooled_time_embedding + pooled_camera_pose_embedding, #+ pooled_camera_pose_embedding,  
+                                         image=features_before, 
+                                         output_type="latent",
+                                         num_inference_steps=50).images[0] #currently using Preceeding Image
             
         return image_latent_data
             
 ## Motion Prediction
 class Deform_Predict(nn.Module):
-    def __init__(self, D=4, W=32, Dd=4, Wd=32, input_ch=3, output_ch=59, multires=10, is_blender=False, is_6dof=False
+    def __init__(self, D=4, W=32, Dd=8, Wd=64, input_ch=3, output_ch=59, multires=10, is_blender=False, is_6dof=False
                  ,embed_dim = 128, num_heads = 8 # 3D Self-Attention, embed_dim = latent_dim 
                  ,input_channels = 3, hidden_dim = 256, latent_dim = 128, output_channels = 3 # VAE
-                 ,input_image_bedding=768, output_image_embedding=1280, Wi = 128, Ddi = 4 # MLP to decode latent compilation from Diffusion Model
+                 ,input_image_bedding=768, output_image_embedding=1280, Wi = 128, Ddi = 8 # MLP to decode latent compilation from Diffusion Model
                  ):
         super(Deform_Predict, self).__init__()
         # Input layers
@@ -310,17 +389,17 @@ class Deform_Predict(nn.Module):
         ### OUTPUT LAYER FOR D-XYZ, D-ROTATION, D-SCALING
         ## IF USING LINEAR LAYER
         # d_xyz
-        self.gaussian_warp = nn.Linear(Wd*2, 3)
-        #self.gaussian_warp = nn.Linear(Wd, 3)
-        #self.gaussian_warp_image = nn.Linear(Wd, 3)
+        self.gaussian_warp_final = nn.Linear(6, 3)
+        self.gaussian_warp = nn.Linear(Wd, 3)
+        self.gaussian_warp_image = nn.Linear(Wd, 3)
         # d_rotation
-        self.gaussian_rotation = nn.Linear(Wd*2, 4)
-        #self.gaussian_rotation = nn.Linear(Wd, 4)
-        #self.gaussian_rotation_image = nn.Linear(Wd, 4)
+        self.gaussian_rotation_final = nn.Linear(8, 4)
+        self.gaussian_rotation = nn.Linear(Wd, 4)
+        self.gaussian_rotation_image = nn.Linear(Wd, 4)
         # d_scaling
-        self.gaussian_scaling = nn.Linear(Wd*2, 3)
-        #self.gaussian_scaling = nn.Linear(Wd, 3)
-        #self.gaussian_scaling_image = nn.Linear(Wd, 3)
+        self.gaussian_scaling_final = nn.Linear(6, 3)
+        self.gaussian_scaling = nn.Linear(Wd, 3)
+        self.gaussian_scaling_image = nn.Linear(Wd, 3)
 
     def forward(self, time_input, time_input_before, time_input_after, xyz, 
                 d_xyz_before, d_xyz_after, new_feature_latent_data, new_feature_latent_data_all):
@@ -505,7 +584,7 @@ class Deform_Predict(nn.Module):
 
                 ## COMBINED BY ADDITION
                 #combined_input_wt = combined_input_wt + image_combined_wt
-                combined_input_wt = torch.cat([combined_input_wt, image_combined_wt], -1) 
+                #combined_input_wt = torch.cat([combined_input_wt, image_combined_wt], -1) 
 
             else:
                 #print('THAT LOOP')
@@ -625,21 +704,24 @@ class Deform_Predict(nn.Module):
 
                 ## COMBINED BY ADDITION
                 #combined_input_wt = combined_input_wt + image_combined_wt
-                combined_input_wt = torch.cat([combined_input_wt, image_combined_wt], -1) 
+                #combined_input_wt = torch.cat([combined_input_wt, image_combined_wt], -1) 
     
 
         #### d_xyz
         ## dynamic part
         # Linear
-        d_xyz = self.gaussian_warp(combined_input_wt) #+ self.gaussian_warp_image(image_combined_wt)
+        #d_xyz = self.gaussian_warp(combined_input_wt) #+ self.gaussian_warp_image(image_combined_wt)
+        d_xyz = self.gaussian_warp_final(torch.cat([self.gaussian_warp(combined_input_wt),self.gaussian_warp_image(image_combined_wt)], -1))
         #### d_rotation
         ## dynamic part
         # Linear
-        d_rotation = self.gaussian_rotation(combined_input_wt) #+ self.gaussian_rotation_image(image_combined_wt)  
+        #d_rotation = self.gaussian_rotation(combined_input_wt) #+ self.gaussian_rotation_image(image_combined_wt) 
+        d_rotation = self.gaussian_rotation_final(torch.cat([self.gaussian_rotation(combined_input_wt),self.gaussian_rotation_image(image_combined_wt)], -1))
         #### d_scaling
         ## dynamic 
         # Linear
-        d_scaling = self.gaussian_scaling(combined_input_wt) #+ self.gaussian_scaling_image(image_combined_wt)  
+        #d_scaling = self.gaussian_scaling(combined_input_wt) #+ self.gaussian_scaling_image(image_combined_wt)  
+        d_scaling = self.gaussian_scaling_final(torch.cat([self.gaussian_scaling(combined_input_wt),self.gaussian_scaling_image(image_combined_wt)], -1))
 
         return  d_xyz, d_rotation, d_scaling
 
