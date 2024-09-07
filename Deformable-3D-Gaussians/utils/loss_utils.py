@@ -86,6 +86,8 @@ def contrastive_loss(z_i, z_j, temperature=0.5):
 def l2_loss(network_output, gt):
     return ((network_output - gt) ** 2).mean()
 
+def cos_loss(network_output, gt):
+    return 1 - F.cosine_similarity(network_output, gt, dim=0).mean()
 
 def gaussian(window_size, sigma):
     gauss = torch.Tensor([exp(-(x - window_size // 2) ** 2 / float(2 * sigma ** 2)) for x in range(window_size)])

@@ -49,9 +49,18 @@ def render_set(model_path, load2gpu_on_the_fly, is_6dof, name, iteration, views,
     frame_number = 0
     total_frame = len(views)
     #print('Lenght of views: ',len(views))
-    h = 10 ### <--------------------------------------------------------------------------------------------------------------- MANUALLY UPDATED
+    h = 5 ### <--------------------------------------------------------------------------------------------------------------- MANUALLY UPDATED
 
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
+        '''
+        # Previous key frame
+        key_frame_before =  max(frame_number-1,0)
+        viewpoint_cam_before = viewpoint_stack[key_frame_before]
+        # Proceeding key frame
+        key_frame_after =  min(frame_number+1,total_frame-1) # every h-th frame
+        viewpoint_cam_after = viewpoint_stack[key_frame_after]
+        '''
+        
         # Previous key frame
         key_frame_before =  (frame_number//h)*h
         viewpoint_cam_before = views[key_frame_before]
@@ -139,7 +148,7 @@ def render_set(model_path, load2gpu_on_the_fly, is_6dof, name, iteration, views,
         #new_feature_latent_data = new_feature_latent_data.unsqueeze(0)
         new_feature_latent_data = new_feature_latent_data.to(device)
         '''
-        d_xyz, d_rotation, d_scaling = deform_predict.step(time_input, time_input_before, time_input_after, xyz.detach(),
+        d_xyz, d_rotation, d_scaling, latent_loss = deform_predict.step(time_input, time_input_before, time_input_after, xyz.detach(),
                                                            d_xyz_before, d_xyz_after, new_feature_latent_data,new_feature_latent_data_all) #(features_before, features_after)
         #d_xyz, d_rotation, d_scaling = deform_predict.step(time_input+ast_noise, time_input_before, time_input_after, d_xyz_before, d_xyz_after, new_feature_latent_data) 
         #d_xyz, d_rotation, d_scaling = deform_predict.step(time_input, xyz.detach(), new_feature_latent_data)

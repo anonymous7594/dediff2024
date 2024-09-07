@@ -44,7 +44,7 @@ def ArrayToTorch(array, resolution):
 
 
 def get_expon_lr_func(
-        lr_init, lr_final, lr_delay_steps=0, lr_delay_mult=1.0, max_steps=1000000
+        lr_init, lr_final, lr_delay_steps=0, lr_delay_mult=1.0, max_steps=1000000, start_step=0
 ):
     """
     Copied from Plenoxels
@@ -62,7 +62,10 @@ def get_expon_lr_func(
     """
 
     def helper(step):
-        if step < 0 or (lr_init == 0.0 and lr_final == 0.0):
+        # Adjust the step to account for the starting iteration
+        effective_step = step - start_step
+
+        if effective_step  < 0 or (lr_init == 0.0 and lr_final == 0.0):
             # Disable this parameter
             return 0.0
         if lr_delay_steps > 0:
@@ -72,7 +75,7 @@ def get_expon_lr_func(
             )
         else:
             delay_rate = 1.0
-        t = np.clip(step / max_steps, 0, 1)
+        t = np.clip(effective_step  / (max_steps - start_step), 0, 1)
         log_lerp = np.exp(np.log(lr_init) * (1 - t) + np.log(lr_final) * t)
         return delay_rate * log_lerp
 
@@ -80,7 +83,7 @@ def get_expon_lr_func(
 
 
 def get_linear_noise_func(
-        lr_init, lr_final, lr_delay_steps=0, lr_delay_mult=1.0, max_steps=1000000
+        lr_init, lr_final, lr_delay_steps=0, lr_delay_mult=1.0, max_steps=1000000, start_step=0
 ):
     """
     Copied from Plenoxels
@@ -98,7 +101,10 @@ def get_linear_noise_func(
     """
 
     def helper(step):
-        if step < 0 or (lr_init == 0.0 and lr_final == 0.0):
+        # Adjust the step to account for the starting iteration
+        effective_step = step - start_step
+
+        if effective_step  < 0 or (lr_init == 0.0 and lr_final == 0.0):
             # Disable this parameter
             return 0.0
         if lr_delay_steps > 0:

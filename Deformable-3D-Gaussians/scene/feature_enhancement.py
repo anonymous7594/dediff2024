@@ -31,7 +31,8 @@ class FeatureEnhancement:
         self.deform_scheduler_args = get_expon_lr_func(lr_init=training_args.position_lr_init_fe * self.spatial_lr_scale,
                                                       lr_final=training_args.position_lr_final_fe,
                                                        lr_delay_mult=training_args.position_lr_delay_mult_fe,
-                                                      max_steps=training_args.fe_lr_max_steps)
+                                                      max_steps=training_args.fe_lr_max_steps,
+                                                      start_step=training_args.fe_lr_start_step)
 
     def save_weights(self, model_path, iteration):
         out_weights_path = os.path.join(model_path, "dm_latent/iteration_{}".format(iteration))
