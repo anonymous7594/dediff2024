@@ -14,9 +14,11 @@ class DeformPredict:
         self.spatial_lr_scale = 5
 
     def step(self, time_input, time_input_before, time_input_after, xyz, 
-             d_xyz_before, d_xyz_after, new_feature_latent_data, new_feature_latent_data_all): #features_before, features_after): #, d_xyz_current):
+             d_xyz_before, d_xyz_after, new_feature_latent_data, new_feature_latent_data_all,
+             d_xyz_pre, d_rotation_pre, d_scaling_pre): #features_before, features_after): #, d_xyz_current):
         return self.deform(time_input, time_input_before, time_input_after, xyz, 
-                           d_xyz_before, d_xyz_after, new_feature_latent_data, new_feature_latent_data_all) # features_before, features_after)
+                           d_xyz_before, d_xyz_after, new_feature_latent_data, new_feature_latent_data_all,
+                           d_xyz_pre, d_rotation_pre, d_scaling_pre) # features_before, features_after)
     #def step(self, time_input,time_input_before,time_input_after,d_xyz_before, d_xyz_after
     #            ,random_time_input_before,random_time_input_after,random_d_xyz_before, random_d_xyz_after):
     #    return self.deform(time_input,time_input_before,time_input_after,d_xyz_before, d_xyz_after

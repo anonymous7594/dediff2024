@@ -164,8 +164,24 @@ def calculate_motion_loss(positions_t_minus_h, positions_t, positions_t_plus_h):
     motion_loss = torch.norm(deformation_t_minus_h_to_t - deformation_t_to_t_plus_h, dim=-1).mean()
     
     return motion_loss
-    
 
+
+def calculate_motion_loss_ver_2(positions_t_minus_h, positions_t, positions_t_plus_h, t_diff_minus_h, t_diff_plus_h):
+    # Calculate deformations between consecutive time steps
+    deformation_t_minus_h_to_t = abs(calculate_deformation(positions_t_minus_h, positions_t))
+    deformation_t_to_t_plus_h = abs(calculate_deformation(positions_t, positions_t_plus_h))
+
+    # Assign weight based on time diff
+    total_diff = abs(t_diff_minus_h) + abs(t_diff_plus_h)
+    weight_minus = abs(t_diff_plus_h)/total_diff
+    weight_plus = abs(t_diff_minus_h)/total_diff
+    
+    # Motion loss is the mean of the norm of the difference in deformations
+    motion_loss = torch.norm(weight_minus*deformation_t_minus_h_to_t - weight_plus*deformation_t_to_t_plus_h, dim=-1).mean()
+    
+    return motion_loss
+
+'''
 def calculate_motion_loss_ver_2(positions_t_minus_h, positions_t, positions_t_plus_h, t_minus, t_plus): #### -- exp with bad results
     # Calculate deformations between consecutive time steps
     deformation_t_minus_h_to_t = calculate_deformation(positions_t_minus_h, positions_t)/t_minus
@@ -276,3 +292,4 @@ def calculate_rigid_loss_knn(positions_t_minus_h, positions_t, positions_t_plus_
     rigid_loss = torch.sum(delta_d_t_minus_h_to_t**2) + torch.sum(delta_d_t_to_t_plus_h**2)
     
     return rigid_loss.mean()
+    '''

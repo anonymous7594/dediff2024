@@ -299,16 +299,16 @@ class DiffusionModelLatent(nn.Module):
                                              pooled_prompt_embeds = final_pooled_image_embedding + pooled_time_embedding + pooled_camera_pose_embedding, #+ pooled_camera_pose_embedding,  
                                          image=features_before, 
                                          output_type="latent",
-                                         num_inference_steps=50).images[0] #currently using Preceeding Image
+                                         num_inference_steps=25).images[0] #currently using Preceeding Image
             
         return image_latent_data
             
 ## Motion Prediction
 class Deform_Predict(nn.Module):
-    def __init__(self, D=4, W=32, Dd=4, Wd=32, input_ch=3, output_ch=59, multires=10, is_blender=False, is_6dof=False
+    def __init__(self, D=4, W=32, Dd=8, Wd=32, input_ch=3, output_ch=59, multires=10, is_blender=False, is_6dof=False
                  ,embed_dim = 128, num_heads = 8 # 3D Self-Attention, embed_dim = latent_dim 
                  ,input_channels = 3, hidden_dim = 256, latent_dim = 128, output_channels = 3 # VAE
-                 ,input_image_bedding=768, output_image_embedding=1280, Wi = 32, Ddi = 4 # MLP to decode latent compilation from Diffusion Model
+                 ,input_image_bedding=768, output_image_embedding=1280, Wi = 128, Ddi = 8 # MLP to decode latent compilation from Diffusion Model
                  ):
         super(Deform_Predict, self).__init__()
         # Input layers
@@ -346,13 +346,14 @@ class Deform_Predict(nn.Module):
         self.embed_fn, xyz_input_ch = get_embedder(multires, 3)
         self.input_ch = xyz_input_ch + time_input_ch_current
 
-        
+        '''
         ## Deform Network
         self.linear_deform = nn.ModuleList(
                 [nn.Linear(self.input_ch, Wd)] + [
                     nn.Linear(Wd, Wd) if i not in self.skips_d else nn.Linear(Wd + self.input_ch, Wd)
                     for i in range(Dd - 1)]
             )
+        '''
         '''
         self.norms_linear_deform = nn.ModuleList(
             [nn.BatchNorm1d(Wd) for _ in range(Dd)]
@@ -440,18 +441,34 @@ class Deform_Predict(nn.Module):
         self.gaussian_warp_final = nn.Linear(3, 3)
         self.gaussian_warp = nn.Linear(Wd, 3)
         self.gaussian_warp_image = nn.Linear(Wd, 3)
+        # combine with deform() results
+        #self.gaussian_warp_df_1 = nn.Linear(6, 6)
+        #self.gaussian_warp_df_2 = nn.Linear(6, 3)
+        self.gaussian_warp_df = nn.Linear(3, 3)
+        
         # d_rotation
         self.gaussian_rotation_final = nn.Linear(4, 4)
         self.gaussian_rotation = nn.Linear(Wd, 4)
         self.gaussian_rotation_image = nn.Linear(Wd, 4)
+        # combine with deform() results
+        #self.gaussian_rotation_df_1 = nn.Linear(8, 8)
+        #self.gaussian_rotation_df_2 = nn.Linear(8, 4)
+        self.gaussian_rotation_df = nn.Linear(4, 4)
+
         # d_scaling
         self.gaussian_scaling_final = nn.Linear(3, 3)
         self.gaussian_scaling = nn.Linear(Wd, 3)
         self.gaussian_scaling_image = nn.Linear(Wd, 3)
+        # combine with deform() results
+        #self.gaussian_scaling_df_1 = nn.Linear(6, 6)
+        #self.gaussian_scaling_df_2 = nn.Linear(6, 3)
+        self.gaussian_scaling_df = nn.Linear(3, 3)
 
     def forward(self, time_input, time_input_before, time_input_after, xyz, 
-                d_xyz_before, d_xyz_after, new_feature_latent_data, new_feature_latent_data_all):
+                d_xyz_before, d_xyz_after, new_feature_latent_data, new_feature_latent_data_all,
+                d_xyz_pre, d_rotation_pre, d_scaling_pre):
     #def forward(self, time_input, xyz, new_feature_latent_data):    
+        
         ### Apply Static-Dynamic mask
         combined_mask_threshold = 0.2
         diff_xyz = abs(d_xyz_before - d_xyz_after)
@@ -459,7 +476,7 @@ class Deform_Predict(nn.Module):
         condition = (torch.sigmoid(diff_xyz_linear) >  combined_mask_threshold).any(dim=1)
         # Split the tensor based on the custom condition
         # Before
-        d_xyz_before_dynamic = d_xyz_before[condition].to(device)
+        d_xyz_before_dynamic = d_xyz_before[condition].to(device) #d_xyz_before.to(device) #
         d_xyz_before_static = d_xyz_before[~condition].to(device)
         time_input_before = time_input_before[condition].to(device)
         # After
@@ -477,10 +494,11 @@ class Deform_Predict(nn.Module):
         time_diff_after_emb = self.embed_time_fn_after(time_input_after)
         d_xyz_after_emb = self.embed_fn_after(d_xyz_after_dynamic)
         d_xyz_after_embed_wt = torch.cat([time_diff_after_emb, d_xyz_after_emb], dim=-1)
+
         # current
         time_input = time_input[condition]
         time_current_embed = self.embed_time_fn_current(time_input)     
-        xyz_embed = self.embed_fn(xyz)
+        #xyz_embed = self.embed_fn(xyz)
 
 
         #### Decoding + Add feature enhancement if needed
@@ -508,7 +526,7 @@ class Deform_Predict(nn.Module):
                 #    d_xyz_after_wt = self.drop_out(d_xyz_after_wt)
                 if i in self.skips:
                     d_xyz_after_wt = torch.cat([d_xyz_after_embed_wt, d_xyz_after_wt], -1)
-
+            '''
             ### deformation field for current timestep
             combined_input_wt = torch.cat([xyz_embed, time_current_embed], dim=-1)
             for i, l in enumerate(self.linear_deform):
@@ -517,7 +535,7 @@ class Deform_Predict(nn.Module):
                 combined_input_wt = F.relu(combined_input_wt)
                 if i in self.skips_d:
                     combined_input_wt = torch.cat([xyz_embed, time_current_embed, combined_input_wt], -1)
-            
+            '''
             ### decoding combination between past and future encoded values
             d_xyz_r = torch.cat([d_xyz_before_wt, d_xyz_after_wt, time_current_embed], dim=-1)
             ### d_xyz convert to output  
@@ -530,11 +548,10 @@ class Deform_Predict(nn.Module):
                 #    d_xyz_r_wt = self.drop_out(d_xyz_r_wt)
                 if i in self.skips_d:
                     d_xyz_r_wt = torch.cat([d_xyz_r, d_xyz_r_wt], -1) 
-            
-            combined_input_wt = d_xyz_r_wt + combined_input_wt
+            combined_input_wt = d_xyz_r_wt #+ combined_input_wt
                 
         else: 
-            
+            '''
             combined_input_wt = torch.cat([xyz_embed, time_current_embed], dim=-1)
             for i, l in enumerate(self.linear_deform):
                 combined_input_wt = self.linear_deform[i](combined_input_wt)
@@ -542,7 +559,7 @@ class Deform_Predict(nn.Module):
                 combined_input_wt = F.relu(combined_input_wt)
                 if i in self.skips_d:
                     combined_input_wt = torch.cat([xyz_embed, time_current_embed, combined_input_wt], -1)
-            
+            '''
 
             ### UPDATE NEW FEATURE ENHANCEMENT DATA
             #if new_feature_latent_data.ndimension() == 3:
@@ -593,6 +610,7 @@ class Deform_Predict(nn.Module):
                     #    #    image_combined_wt = self.drop_out(image_combined_wt)
                     if i in self.skips_d:
                         image_combined_wt = torch.cat([image_combined, image_combined_wt], -1) 
+                '''
                 # Decode the image back to the original latent
                 image_decoded =image_combined_wt
                 for i, l in enumerate(self.linear_image_decode):
@@ -604,9 +622,9 @@ class Deform_Predict(nn.Module):
                         image_decoded = torch.cat([image_decoded, image_combined_wt], -1) 
                 image_decoded = self.output_layer(image_decoded)
                 loss_image_latent_encoding = l2_loss(image_decoded, reshaped_image_latent_data) + cos_loss(image_decoded, reshaped_image_latent_data)*0.001
+                '''
+                loss_image_latent_encoding = 0
                 
-                
-
                 #### Encoding data from before-after frames
                 ### d_xyz before
                 d_xyz_before_wt = d_xyz_before_embed_wt
@@ -644,13 +662,12 @@ class Deform_Predict(nn.Module):
                     if i in self.skips_d:
                         d_xyz_r_wt = torch.cat([d_xyz_r, d_xyz_r_wt], -1) 
 
-                combined_input_wt = d_xyz_r_wt + combined_input_wt
-
+                combined_input_wt = d_xyz_r_wt #+ combined_input_wt
                 ## COMBINED BY ADDITION
                 #combined_input_wt = combined_input_wt + image_combined_wt
                 #combined_input_wt = torch.cat([combined_input_wt, image_combined_wt], -1) 
-
             else:
+                
                 #print('THAT LOOP')
                 #### IMAGE DECODER - Single Image ------------------------------------------------------------------------------------------------------------------
                 ## Convert to d-xyz latent
@@ -658,20 +675,20 @@ class Deform_Predict(nn.Module):
                 flattened_image_latent_data = new_feature_latent_data.flatten()
                 flattened_image_latent_data = flattened_image_latent_data.to(device)
 
-                '''
-                ## CONCATENATE TO THE INPUT BEFORE DECODER
-                # Calculate the number of elements needed for the target shape
-                num_elements_needed = d_xyz_before_dynamic.shape[0] * self.W
-                # If the flattened tensor has fewer elements than needed, pad with zeros (or replicate)
-                if flattened_image_latent_data.numel() < num_elements_needed:
-                    repeats = (num_elements_needed // flattened_image_latent_data.numel()) + 1
-                    padded_image_latent_data = flattened_image_latent_data.repeat(repeats)[:num_elements_needed]
-                else:
-                    padded_image_latent_data = flattened_image_latent_data[:num_elements_needed]
-                # Reshape to the desired shape [50000, 64]
-                reshaped_image_latent_data = padded_image_latent_data.reshape(d_xyz_before_dynamic.shape[0], self.W)
-                image_combined_encoded = reshaped_image_latent_data
-                '''
+                
+                ### CONCATENATE TO THE INPUT BEFORE DECODER
+                ## Calculate the number of elements needed for the target shape
+                #num_elements_needed = d_xyz_before_dynamic.shape[0] * self.W
+                ## If the flattened tensor has fewer elements than needed, pad with zeros (or replicate)
+                #if flattened_image_latent_data.numel() < num_elements_needed:
+                #    repeats = (num_elements_needed // flattened_image_latent_data.numel()) + 1
+                #    padded_image_latent_data = flattened_image_latent_data.repeat(repeats)[:num_elements_needed]
+                #else:
+                #    padded_image_latent_data = flattened_image_latent_data[:num_elements_needed]
+                ## Reshape to the desired shape [50000, 64]
+                #reshaped_image_latent_data = padded_image_latent_data.reshape(d_xyz_before_dynamic.shape[0], self.W)
+                #image_combined_encoded = reshaped_image_latent_data
+                
                 ## CONCATENATE TO THE COMBINED OUTPUT
                 # Calculate the number of elements needed for the target shape
                 num_elements_needed = d_xyz_before_dynamic.shape[0] * self.Wi
@@ -699,6 +716,7 @@ class Deform_Predict(nn.Module):
                     if i in self.skips_d:
                         image_combined_wt = torch.cat([image_combined, image_combined_wt], -1) 
 
+                '''
                 # Decode the image back to the original latent
                 image_decoded =image_combined_wt
                 for i, l in enumerate(self.linear_image_decode):
@@ -710,6 +728,10 @@ class Deform_Predict(nn.Module):
                         image_decoded = torch.cat([image_decoded, image_combined_wt], -1) 
                 image_decoded = self.output_layer(image_decoded)
                 loss_image_latent_encoding = l2_loss(image_decoded, reshaped_image_latent_data) + cos_loss(image_decoded, reshaped_image_latent_data)*0.001
+                '''
+                loss_image_latent_encoding = 0
+
+                
                 
                 #### IMAGE DECODER - Multi-Images ------------------------------------------------------------------------------------------------------------------
                 ## Apply latent compilation through 3d self-attention and convo3d layers
@@ -744,8 +766,8 @@ class Deform_Predict(nn.Module):
                     #    #    image_combined_wt = self.drop_out(image_combined_wt)
                     if i in self.skips_d:
                         image_combined_wt_all = torch.cat([image_combined, image_combined_wt_all], -1) 
-                image_combined_wt = image_combined_wt + image_combined_wt_all
-
+                #image_combined_wt = image_combined_wt + image_combined_wt_all
+                image_combined_wt = image_combined_wt_all
                 #### Encoding data from before-after frames
                 ### d_xyz before
                 d_xyz_before_wt = d_xyz_before_embed_wt
@@ -782,13 +804,13 @@ class Deform_Predict(nn.Module):
                     if i in self.skips_d:
                         d_xyz_r_wt = torch.cat([d_xyz_r, d_xyz_r_wt], -1) 
 
-                combined_input_wt = d_xyz_r_wt + combined_input_wt
-
+                combined_input_wt = d_xyz_r_wt #+ combined_input_wt
+                
 
                 ## COMBINED BY ADDITION
                 #combined_input_wt = combined_input_wt + image_combined_wt
                 #combined_input_wt = torch.cat([combined_input_wt, image_combined_wt], -1) 
-    
+            
 
         #### d_xyz
         ## dynamic part
@@ -796,20 +818,47 @@ class Deform_Predict(nn.Module):
         #d_xyz = self.gaussian_warp(combined_input_wt) #+ self.gaussian_warp_image(image_combined_wt)
         #d_xyz = self.gaussian_warp_final(torch.cat([self.gaussian_warp(combined_input_wt),self.gaussian_warp_image(image_combined_wt)], -1))
         d_xyz = self.gaussian_warp_final(self.gaussian_warp(combined_input_wt)+self.gaussian_warp_image(image_combined_wt))
+        ## static part
+        dxyz_remaining = torch.zeros_like(d_xyz_before_static).to(device)
+        ## combine value
+        d_xyz_combined = torch.cat((d_xyz, dxyz_remaining), dim=0)
+        #d_xyz_combined = d_xyz_combined + d_xyz_pre
+        # combine with df values
+        #d_xyz_combined = torch.cat((d_xyz_combined, d_xyz_pre), dim=-1)
+        #d_xyz_combined = F.relu(self.gaussian_warp_df_2(self.gaussian_warp_df_1(d_xyz_combined)))
+        d_xyz_combined = self.gaussian_warp_df(d_xyz_combined + d_xyz_pre)
+
         #### d_rotation
         ## dynamic part
         # Linear
         #d_rotation = self.gaussian_rotation(combined_input_wt) #+ self.gaussian_rotation_image(image_combined_wt) 
         #d_rotation = self.gaussian_rotation_final(torch.cat([self.gaussian_rotation(combined_input_wt),self.gaussian_rotation_image(image_combined_wt)], -1))
         d_rotation = self.gaussian_rotation_final(self.gaussian_rotation(combined_input_wt)+self.gaussian_rotation_image(image_combined_wt))
+        ## static part
+        d_rotation_remaining = torch.zeros((d_xyz_before_static.size(0), 4)).to(device)
+        ## combine value
+        d_rotation_combined = torch.cat((d_rotation, d_rotation_remaining), dim=0)
+        # combine with df values
+        #d_rotation_combined = torch.cat((d_rotation_combined, d_rotation_pre), dim=-1)
+        #d_rotation_combined = F.relu(self.gaussian_rotation_df_2(self.gaussian_rotation_df_1(d_rotation_combined)))
+        d_rotation_combined = self.gaussian_rotation_df(d_rotation_combined + d_rotation_pre)
+
         #### d_scaling
         ## dynamic 
         # Linear
         #d_scaling = self.gaussian_scaling(combined_input_wt) #+ self.gaussian_scaling_image(image_combined_wt)  
         #d_scaling = self.gaussian_scaling_final(torch.cat([self.gaussian_scaling(combined_input_wt),self.gaussian_scaling_image(image_combined_wt)], -1))
         d_scaling = self.gaussian_scaling_final(self.gaussian_scaling(combined_input_wt)+self.gaussian_scaling_image(image_combined_wt))
+        ## static part
+        d_scaling_remaining = torch.zeros_like(d_xyz_before_static).to(device)
+        ## combine value
+        d_scaling_combined = torch.cat((d_scaling, d_scaling_remaining), dim=0)
+        # combine with df values
+        #d_scaling_combined = torch.cat((d_scaling_combined, d_scaling_pre), dim=-1)
+        #d_scaling_combined = F.relu(self.gaussian_scaling_df_2(self.gaussian_scaling_df_1(d_scaling_combined)))
+        d_scaling_combined = self.gaussian_scaling_df(d_scaling_combined + d_scaling_pre)
 
-        return  d_xyz, d_rotation, d_scaling, loss_image_latent_encoding
+        return  d_xyz_combined, d_rotation_combined, d_scaling_combined, loss_image_latent_encoding #d_xyz, d_rotation, d_scaling, loss_image_latent_encoding
 
 
 #### Compile multiple latent data

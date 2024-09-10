@@ -91,6 +91,7 @@ def render_set(model_path, load2gpu_on_the_fly, is_6dof, name, iteration, views,
         # Get the deformable values for key frames
         d_xyz_before, d_rotation_before, d_scaling_before = deform.step(xyz.detach(), time_input_before)
         d_xyz_after, d_rotation_after, d_scaling_after = deform.step(xyz.detach(),time_input_after)
+        d_xyz_pre, d_rotation_pre, d_scaling_pre = deform.step(xyz.detach(),time_input)
         #d_xyz, d_rotation, d_scaling = deform.step(xyz.detach(),time_input)
 
         # Get the Gaussians features for key frames
@@ -132,9 +133,12 @@ def render_set(model_path, load2gpu_on_the_fly, is_6dof, name, iteration, views,
             latent_dict = torch.load(os.path.join(args.model_path, "latent_dict.pth"))
             new_feature_latent_data = latent_dict[f'frame_{frame_number}']
             #print(new_feature_latent_data.size())
-            
         else:
-            new_feature_latent_data = torch.tensor([]).to(device)
+            # using all frames
+            latent_dict = torch.load(os.path.join(args.model_path, "latent_dict.pth"))
+            new_feature_latent_data = latent_dict[f'frame_{frame_number}']
+
+            new_feature_latent_data_all = []
             #print('NO LATENT DATA..................SUCCESSFULLY')
 
         '''
@@ -149,7 +153,8 @@ def render_set(model_path, load2gpu_on_the_fly, is_6dof, name, iteration, views,
         new_feature_latent_data = new_feature_latent_data.to(device)
         '''
         d_xyz, d_rotation, d_scaling, latent_loss = deform_predict.step(time_input, time_input_before, time_input_after, xyz.detach(),
-                                                           d_xyz_before, d_xyz_after, new_feature_latent_data,new_feature_latent_data_all) #(features_before, features_after)
+                                                           d_xyz_before, d_xyz_after, new_feature_latent_data, new_feature_latent_data_all,
+                                                           d_xyz_pre, d_rotation_pre, d_scaling_pre) #(features_before, features_after)
         #d_xyz, d_rotation, d_scaling = deform_predict.step(time_input+ast_noise, time_input_before, time_input_after, d_xyz_before, d_xyz_after, new_feature_latent_data) 
         #d_xyz, d_rotation, d_scaling = deform_predict.step(time_input, xyz.detach(), new_feature_latent_data)
         #d_xyz, d_rotation, d_scaling, h_input = deform.step(xyz.detach(), time_input)   

@@ -91,7 +91,7 @@ class OptimizationParams(ParamGroup):
         self.rotation_lr = 0.001
         self.percent_dense = 0.01
         self.lambda_dssim = 0.2 ## 0.2
-        self.densification_interval = 100 ### the reason that the row size decrease every 100 iterations # 100
+        self.densification_interval = 400 ### the reason that the row size decrease every 100 iterations # 100
         self.opacity_reset_interval = 3000
         self.densify_from_iter = 500 # 500
         self.densify_until_iter = 25_000    #15_000 (original), 25_000
@@ -108,7 +108,7 @@ class OptimizationParams(ParamGroup):
         self.position_lr_final_fe = 0.0000016 # 0.0000016
         self.position_lr_delay_mult_fe = 0.01 #0.01
         #self.position_lr_max_steps = 30_000
-        self.fe_lr_max_steps = 13000 #40_000, 11000, 12000
+        self.fe_lr_max_steps = 11000 #40_000, 11000, 12000
         self.fe_lr_start_step = 10000 #0 (original)
         # ---------------
         super().__init__(parser, "Optimization Parameters")
