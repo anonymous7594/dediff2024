@@ -83,15 +83,15 @@ class OptimizationParams(ParamGroup):
         self.position_lr_init = 0.00016
         self.position_lr_final = 0.0000016
         self.position_lr_delay_mult = 0.01
-        self.position_lr_max_steps = 30_000 # 30_000 ------------> no needed
+        self.position_lr_max_steps = 40_000 # 30_000 # Gaussian Model
         self.deform_lr_max_steps = 40_000 # 40_000
         self.feature_lr = 0.0025
         self.opacity_lr = 0.05
         self.scaling_lr = 0.001
         self.rotation_lr = 0.001
         self.percent_dense = 0.01
-        self.lambda_dssim = 0.2 ## 0.2
-        self.densification_interval = 400 ### the reason that the row size decrease every 100 iterations # 100
+        self.lambda_dssim = 0.2 ## 0.2 (original)
+        self.densification_interval = 100 ### the reason that the row size decrease every 100 iterations # 100
         self.opacity_reset_interval = 3000
         self.densify_from_iter = 500 # 500
         self.densify_until_iter = 25_000    #15_000 (original), 25_000
@@ -100,16 +100,14 @@ class OptimizationParams(ParamGroup):
         self.position_lr_init_predict = 0.016 #0.00016, 0.016, 0.16
         self.position_lr_final_predict = 0.0000016 # 0.0000016
         self.position_lr_delay_mult_predict = 0.01 #0.01
-        #self.position_lr_max_steps = 30_000
         self.predict_lr_max_steps = 40_000 #40_000
-        self.predict_lr_start_step = 11000 #0 (original)
+        self.predict_lr_start_step = 10295 #0 (original), 11_000
         # Feature Enhancement
         self.position_lr_init_fe = 0.016 #0.00016, 0.016, 0.16
         self.position_lr_final_fe = 0.0000016 # 0.0000016
         self.position_lr_delay_mult_fe = 0.01 #0.01
-        #self.position_lr_max_steps = 30_000
-        self.fe_lr_max_steps = 11000 #40_000, 11000, 12000
-        self.fe_lr_start_step = 10000 #0 (original)
+        self.fe_lr_max_steps = 40_000 #40_000, 11_000, 12_000
+        self.fe_lr_start_step = 10000 #0 (original), 10_000
         # ---------------
         super().__init__(parser, "Optimization Parameters")
         print('40000 iterations with 3000 warm-up iterations with 100 densification interval')

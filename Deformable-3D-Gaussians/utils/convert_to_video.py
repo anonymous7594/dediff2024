@@ -26,6 +26,6 @@ def create_video_from_images(folder_path, output_file, frame_rate=30, img_size=N
     cv2.destroyAllWindows()
     video.release()
 
-folder_path = '/home/ad/20813716/dediff2024/Deformable-3D-Gaussians/output/exp_nerfds_basin-144/test/ours_40000/renders'  
-output_file = '/home/ad/20813716/dediff2024/Deformable-3D-Gaussians/output/exp_nerfds_basin-144/test/ours_40000/output_videos.mp4'  
+folder_path = '/home/ad/20813716/dediff2024/Deformable-3D-Gaussians/output/exp_nerfds_as-93/test/ours_40000/renders'  
+output_file = '/home/ad/20813716/dediff2024/Deformable-3D-Gaussians/output/exp_nerfds_as-93/test/ours_40000/output_videos.mp4'  
 create_video_from_images(folder_path, output_file)

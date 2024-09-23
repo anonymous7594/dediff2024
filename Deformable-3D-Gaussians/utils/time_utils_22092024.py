@@ -498,7 +498,6 @@ class Deform_Predict(nn.Module):
         # current
         time_input = time_input#[condition]
         time_current_embed = self.embed_time_fn_current(time_input)     
-        #print('time_current_embed: ',time_current_embed.size())
         #xyz_embed = self.embed_fn(xyz)
 
 
@@ -670,11 +669,74 @@ class Deform_Predict(nn.Module):
                 #combined_input_wt = torch.cat([combined_input_wt, image_combined_wt], -1) 
             else:
                 
+                #print('THAT LOOP')
+                #### IMAGE DECODER - Single Image ------------------------------------------------------------------------------------------------------------------
+                ## Convert to d-xyz latent
+                # Flatten the tensor to 1D
+                flattened_image_latent_data = new_feature_latent_data.flatten()
+                flattened_image_latent_data = flattened_image_latent_data.to(device)
+
+                
+                ### CONCATENATE TO THE INPUT BEFORE DECODER
+                ## Calculate the number of elements needed for the target shape
+                #num_elements_needed = d_xyz_before_dynamic.shape[0] * self.W
+                ## If the flattened tensor has fewer elements than needed, pad with zeros (or replicate)
+                #if flattened_image_latent_data.numel() < num_elements_needed:
+                #    repeats = (num_elements_needed // flattened_image_latent_data.numel()) + 1
+                #    padded_image_latent_data = flattened_image_latent_data.repeat(repeats)[:num_elements_needed]
+                #else:
+                #    padded_image_latent_data = flattened_image_latent_data[:num_elements_needed]
+                ## Reshape to the desired shape [50000, 64]
+                #reshaped_image_latent_data = padded_image_latent_data.reshape(d_xyz_before_dynamic.shape[0], self.W)
+                #image_combined_encoded = reshaped_image_latent_data
+                
+                ## CONCATENATE TO THE COMBINED OUTPUT
+                # Calculate the number of elements needed for the target shape
+                num_elements_needed = d_xyz_before_dynamic.shape[0] * self.Wi
+                # If the flattened tensor has fewer elements than needed, pad with zeros (or replicate)
+                if flattened_image_latent_data.numel() < num_elements_needed:
+                    repeats = (num_elements_needed // flattened_image_latent_data.numel()) + 1
+                    padded_image_latent_data = flattened_image_latent_data.repeat(repeats)[:num_elements_needed]
+                else:
+                    padded_image_latent_data = flattened_image_latent_data[:num_elements_needed]
+                # Reshape to the desired shape [50000, 64]
+                reshaped_image_latent_data = padded_image_latent_data.reshape(d_xyz_before_dynamic.shape[0], self.Wi)
+                reshaped_image_latent_data = reshaped_image_latent_data.to(device)
+                #image_combined_wt = reshaped_image_latent_data
+
+                ## Apply Image Embedding Decoder
+                image_combined = torch.cat([reshaped_image_latent_data], dim=-1) #, time_current_embed
+                ### image convert to output
+                image_combined_wt = image_combined
+                for i, l in enumerate(self.linear_image):
+                    image_combined_wt = self.linear_image[i](image_combined_wt)
+                    #image_combined_wt = self.norms_linear_image[i](image_combined_wt)
+                    #image_combined_wt = F.relu(image_combined_wt)
+                    #    #if i == (self.Dd//2 - 1) :
+                    #    #    image_combined_wt = self.drop_out(image_combined_wt)
+                    if i in self.skips_d:
+                        image_combined_wt = torch.cat([image_combined, image_combined_wt], -1) 
+
+                '''
+                # Decode the image back to the original latent
+                image_decoded =image_combined_wt
+                for i, l in enumerate(self.linear_image_decode):
+                    image_decoded = self.linear_image_decode[i](image_decoded)
+                    #image_decoded = F.relu(image_decoded)
+                    #    #if i == (self.Dd//2 - 1) :
+                    #    #    image_combined_wt = self.drop_out(image_combined_wt)
+                    if i in self.skips_d:
+                        image_decoded = torch.cat([image_decoded, image_combined_wt], -1) 
+                image_decoded = self.output_layer(image_decoded)
+                loss_image_latent_encoding = l2_loss(image_decoded, reshaped_image_latent_data) + cos_loss(image_decoded, reshaped_image_latent_data)*0.001
+                '''
+                loss_image_latent_encoding = 0
+
+                
                 
                 #### IMAGE DECODER - Multi-Images ------------------------------------------------------------------------------------------------------------------
                 ## Apply latent compilation through 3d self-attention and convo3d layers
                 new_feature_latent_data_all = new_feature_latent_data_all.to(device)
-                #print('new_feature_latent_data_all: ',new_feature_latent_data_all.size())
                 new_feature_latent_data_all = self.decoder_latent_compilation(new_feature_latent_data_all) # without time dimension
                 # Flatten the tensor to 1D
                 flattened_image_latent_data_all = new_feature_latent_data_all.flatten()
@@ -706,9 +768,9 @@ class Deform_Predict(nn.Module):
                     #    #    image_combined_wt = self.drop_out(image_combined_wt)
                     if i in self.skips_d:
                         image_combined_wt_all = torch.cat([image_combined, image_combined_wt_all], -1) 
-                #image_combined_wt = image_combined_wt + image_combined_wt_all
-                image_combined_wt = image_combined_wt_all
-                loss_image_latent_encoding = 0
+                image_combined_wt = image_combined_wt + image_combined_wt_all
+                #image_combined_wt = image_combined_wt_all
+
 
                 #### Encoding data from before-after frames
                 ### d_xyz before

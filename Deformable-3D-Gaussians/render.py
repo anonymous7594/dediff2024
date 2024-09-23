@@ -49,7 +49,7 @@ def render_set(model_path, load2gpu_on_the_fly, is_6dof, name, iteration, views,
     frame_number = 0
     total_frame = len(views)
     #print('Lenght of views: ',len(views))
-    h = 5 ### <--------------------------------------------------------------------------------------------------------------- MANUALLY UPDATED
+    h = 3 ### <--------------------------------------------------------------------------------------------------------------- MANUALLY UPDATED
 
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
         '''
@@ -92,7 +92,7 @@ def render_set(model_path, load2gpu_on_the_fly, is_6dof, name, iteration, views,
         d_xyz_before, d_rotation_before, d_scaling_before = deform.step(xyz.detach(), time_input_before)
         d_xyz_after, d_rotation_after, d_scaling_after = deform.step(xyz.detach(),time_input_after)
         d_xyz_pre, d_rotation_pre, d_scaling_pre = deform.step(xyz.detach(),time_input)
-        #d_xyz, d_rotation, d_scaling = deform.step(xyz.detach(),time_input)
+        #d_xyz_pre, d_rotation_pre, d_scaling_pre = [], [], []
 
         # Get the Gaussians features for key frames
         # Before
@@ -116,8 +116,8 @@ def render_set(model_path, load2gpu_on_the_fly, is_6dof, name, iteration, views,
         #features_after = image_after
             
         ## Prediction
-        if using_latent:
-            '''
+        #if using_latent:
+        '''
             # using key frames only
             #print('USING LATENT............... SUCCESSFULLY')
             latent_dict = torch.load(os.path.join(args.model_path, "latent_dict.pth"))
@@ -126,19 +126,19 @@ def render_set(model_path, load2gpu_on_the_fly, is_6dof, name, iteration, views,
             #print('LOADING LATENT DATA..................SUCCESSFULLY')
             '''
 
-            new_feature_latent_data_all = torch.load(os.path.join(args.model_path, "latent_dict_compiled.pth"))
-            new_feature_latent_data_all = new_feature_latent_data_all.to(device)
+        new_feature_latent_data_all = torch.load(os.path.join(args.model_path, "latent_dict_compiled.pth"))
+        new_feature_latent_data_all = new_feature_latent_data_all.to(device)
             
-            # using all frames
-            latent_dict = torch.load(os.path.join(args.model_path, "latent_dict.pth"))
-            new_feature_latent_data = latent_dict[f'frame_{frame_number}']
+        # using all frames
+        latent_dict = torch.load(os.path.join(args.model_path, "latent_dict.pth"))
+        new_feature_latent_data = latent_dict[f'frame_{frame_number}']
             #print(new_feature_latent_data.size())
-        else:
+        #else:
             # using all frames
-            latent_dict = torch.load(os.path.join(args.model_path, "latent_dict.pth"))
-            new_feature_latent_data = latent_dict[f'frame_{frame_number}']
+        #    latent_dict = torch.load(os.path.join(args.model_path, "latent_dict.pth"))
+        #    new_feature_latent_data = latent_dict[f'frame_{frame_number}']
 
-            new_feature_latent_data_all = []
+        #    new_feature_latent_data_all = []
             #print('NO LATENT DATA..................SUCCESSFULLY')
 
         '''

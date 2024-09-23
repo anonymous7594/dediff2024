@@ -73,24 +73,25 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
     # FRAME INTERVAL <--------------------------------------------- UPDATED
     h = 3
     ## WARM-UP INTERATIONS <--------------------------------------------- UPDATED
+    #iteration_predict = 10000 
     ## LOAD ALL TRAINING FRAMES
     if not viewpoint_stack:
         viewpoint_stack = scene.getTrainCameras().copy()
     ## ALL TRAINING FRAMES LENGTH
     total_frame = len(viewpoint_stack)
     number_of_frames = list(range(0,total_frame))
-    number_of_frames_dm = list(range(0,total_frame)) # list of frames to train DeformNetwork()
+    number_of_frames_dm = list(range(0,total_frame))
     number_of_frames_dp = list(range(0,total_frame))
     ## ALL KEY FRAMES
     key_frame_list = []
     for i in number_of_frames:
         if (i == 0) or (i % h == 0) or (i == len(number_of_frames)-1):
             key_frame_list.append(i)
-    key_frame_list_in_loop_1 = key_frame_list.copy()
-    key_frame_list_in_loop_2 = key_frame_list.copy()
+    key_frame_list_in_loop = key_frame_list.copy()
     ## SAVING OUTPUT FROM DEFORM() AND FEATURE_ENHANCEMENT()
-    #deform_dict = {}
-    latent_dict = {} # if using key frame for latent only
+    deform_dict = {}
+    latent_dict = {}
+    print('BASIN-107 EXP WITH Diffusion Model')
     
 
     ### DEFINE LOOP TIMESTEP
@@ -99,11 +100,15 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
     m_2 = 1 # to determine training loops for feature_enhancement()
     m_3 = 1
     # Only key frames
-    loop_1_end = m_1 + len(key_frame_list)*m_2 
-    loop_2_end = loop_1_end + len(key_frame_list)*m_3
+    #loop_1_end = len(key_frame_list)*10*m_1 + len(key_frame_list)*m_2 
+    #loop_1_end = total_frame*10*m_1 + len(key_frame_list)*m_2 
     # All frames
-    #loop_1_end = m_1 + total_frame*m_2 
-    #loop_2_end = loop_1_end +total_frame*m_3
+    #loop_1_end = len(key_frame_list)*10*m_1 + total_frame*m_2 
+    #loop_1_end = total_frame*10*m_1 + total_frame*m_2 
+    loop_1_end = m_1 + total_frame*m_2 
+    loop_2_end = loop_1_end +total_frame*m_3
+    #loop_2_start = loop_1_end + len(key_frame_list)*10*m_1
+    #loop_2_end = loop_2_start + len(key_frame_list)*m_2 
     
     print('Number of iterations for training deform() until: ',m_1)
     print('Number of iterations for training feature_enhancement() until: ',loop_1_end)
@@ -113,13 +118,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
 
     ## LATENT COMPILATION
     # Only key frames
-    latent_compiled = torch.zeros((len(key_frame_list), 4, 33, 60)).to(device)
+    #latent_compiled = torch.zeros((len(key_frame_list), 4, 33, 60)).to(device)
     # All frames
-    #latent_compiled = torch.zeros((total_frame, 4, 33, 60)).to(device)
-    #k_th = 0 # update latent_compilation index
+    latent_compiled = torch.zeros((total_frame, 4, 33, 60)).to(device)
+    k_th = 0 # update latent_compilation index
     
     for iteration in range(1, opt.iterations + 1):
-        ### STAGE 1: Training DeformNetwork()
+        ### STAGE 1: Training Deform() for key frames
+        #if iteration < len(key_frame_list)*10*m_1:
         if iteration <= m_1: #total_frame*10*m_1:
             if network_gui.conn == None:
                 network_gui.try_connect()
@@ -185,6 +191,21 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
             # overall loss
             loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) 
             loss.backward()
+
+            if iteration > m_1 - total_frame:
+                ### Apply latent data on key frames only
+                ## Saving latent data from key frames
+                latent_dict[f'key_frame_{key_frame_before}_and_key_frame_{key_frame_after}'] = new_feature_latent_data
+                torch.save(latent_dict, os.path.join(args.model_path, "latent_dict.pth"))
+                ## Saving a compilation of multiple latent data
+                latent_compiled[k_th] = new_feature_latent_data
+                torch.save(latent_compiled, os.path.join(args.model_path, "latent_dict_compiled.pth"))
+                new_feature_latent_data_all = []
+                ## update the next order for latent data 
+                if k_th + 1 < len(key_frame_list):
+                    k_th += 1
+                else:
+                    k_th = 0
 
             iter_end.record()
 
@@ -266,10 +287,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
 
            
             ## Pick key frame randomly
-            if not key_frame_list_in_loop_1:
-                key_frame_list_in_loop_1 = key_frame_list.copy()
-            time_interval = 1 / len(key_frame_list_in_loop_1)
-            frame_number = key_frame_list_in_loop_1.pop(randint(0, len(key_frame_list_in_loop_1) - 1))
+            if not key_frame_list_in_loop:
+                key_frame_list_in_loop = key_frame_list.copy()
+            time_interval = 1 / len(key_frame_list_in_loop)
+            frame_number = key_frame_list_in_loop.pop(randint(0, len(key_frame_list_in_loop) - 1))
             '''
             ## Pick frame by order
             if not number_of_frames:
@@ -345,32 +366,32 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
             time_dim = time_input[0,:]
             new_feature_latent_data = feature_enhancement.step(features_before, features_after, time_dim, viewpoint_cam)                            
             new_feature_latent_data = new_feature_latent_data.to(device)
-
-
-            '''
-            ### Apply latent data on all frames
             ## Saving a compilation of multiple latent data
             latent_compiled[frame_number] = new_feature_latent_data
             torch.save(latent_compiled, os.path.join(args.model_path, "latent_dict_compiled.pth"))
             new_feature_latent_data_all = []
-            '''
+
+            
             ### Apply latent data on key frames only
             ## Saving latent data from key frames
             latent_dict[f'key_frame_{key_frame_before}_and_key_frame_{key_frame_after}'] = new_feature_latent_data
             torch.save(latent_dict, os.path.join(args.model_path, "latent_dict.pth"))
             ## Saving a compilation of multiple latent data
-            k_th = key_frame_list.index(frame_number) # the order of key frame in latent compilation
             latent_compiled[k_th] = new_feature_latent_data
             torch.save(latent_compiled, os.path.join(args.model_path, "latent_dict_compiled.pth"))
             new_feature_latent_data_all = []
-
+            ## update the next order for latent data 
+            if k_th + 1 < len(key_frame_list):
+                k_th += 1
+            else:
+                k_th = 0
             
-            '''      
+            '''
             ### Apply latent data on all frames
             ## Saving latent data from all frames
             latent_dict[f'frame_{frame_number}'] = new_feature_latent_data
             torch.save(latent_dict, os.path.join(args.model_path, "latent_dict.pth"))
-            '''  
+            '''
 
             #### Prediction
             ## Update Gaussians config in key frames
@@ -397,10 +418,36 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
             Ll1 = l1_loss(image, gt_image)
             #Ll2 = l2_loss(image, gt_image)
             lambda_l2 = 0
+            # Motion Loss & Latent Loss
+            #if iteration < opt.warm_up:
+            #    motion_loss = 0
+            #    lambda_motion = 0
+            #    loss_image_latent_encoding = 0
+            #    lambda_latent = 0
+            #else:
             d_xyz_pred = gaussians.get_xyz.detach() + d_xyz
+            #t_diff_minus_h = abs(time_input-time_input_before)
+            #t_diff_plus_h = abs(time_input-time_input_after)
             motion_loss = calculate_motion_loss(d_xyz_before, d_xyz_pred, d_xyz_after) #, t_diff_minus_h, t_diff_plus_h
-            lambda_motion = 0.1
+            #motion_loss = 0
+            lambda_motion = 0.2
             lambda_latent = 0
+            # KL Loss
+            #if frame_number == key_frame_before:
+            #    image1 = image_before
+            #else:
+            #    image1 = image_after
+            #image2 = image
+            # Ensure the images are non-negative and normalized to sum to 1
+            #image1 = torch.clamp(image1, min=1e-10) 
+            #image2 = torch.clamp(image2, min=1e-10)
+            #image1 = image1 / image1.sum()
+            #image2 = image2 / image2.sum()
+            # Flatten the images
+            #image1_flat = image1.view(-1)
+            #image2_flat = image2.view(-1)
+            # Calculate KL Divergence
+            #kl_loss = F.kl_div(image1_flat.log(), image2_flat, reduction='sum')
             kl_loss = 0
             lambda_kl = 0
             lpips_loss = loss_fn_vgg(image, gt_image).reshape(-1)
@@ -469,9 +516,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
                     gaussians.optimizer.step()
                     gaussians.update_learning_rate(iteration)
                     gaussians.optimizer.zero_grad(set_to_none=True)
-                    #deform_predict.optimizer.step()
-                    #deform_predict.optimizer.zero_grad()
-                    #deform_predict.update_learning_rate(iteration)    
+                    deform_predict.optimizer.step()
+                    deform_predict.optimizer.zero_grad()
+                    deform_predict.update_learning_rate(iteration)    
                     #if iteration < len(key_frame_list)*10*m_1 + total_frame*m_2: 
                     feature_enhancement.optimizer.step()
                     feature_enhancement.optimizer.zero_grad()
@@ -504,10 +551,10 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
 
             
             ## Pick key frame randomly
-            if not key_frame_list_in_loop_2:
-                key_frame_list_in_loop_2 = key_frame_list.copy()
-            time_interval = 1 / len(key_frame_list_in_loop_2)
-            frame_number = key_frame_list_in_loop_2.pop(randint(0, len(key_frame_list_in_loop_2) - 1))
+            if not key_frame_list_in_loop:
+                key_frame_list_in_loop = key_frame_list.copy()
+            time_interval = 1 / len(key_frame_list_in_loop)
+            frame_number = key_frame_list_in_loop.pop(randint(0, len(key_frame_list_in_loop) - 1))
             
             '''
             ## Pick frame by order
@@ -582,19 +629,27 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
             time_dim = time_input[0,:]
             new_feature_latent_data = feature_enhancement.step(features_before, features_after, time_dim, viewpoint_cam)                                                                                 
             new_feature_latent_data = new_feature_latent_data.to(device)
-            '''
-            ## Saving a compilation of multiple latent data - all frames
+            ## Saving a compilation of multiple latent data
             latent_compiled[frame_number] = new_feature_latent_data
             torch.save(latent_compiled, os.path.join(args.model_path, "latent_dict_compiled.pth"))
-            '''
+            
+
+
+            
             ### Apply latent data on key frames only
             ## Saving latent data from key frames
             latent_dict[f'key_frame_{key_frame_before}_and_key_frame_{key_frame_after}'] = new_feature_latent_data
             torch.save(latent_dict, os.path.join(args.model_path, "latent_dict.pth"))
             ## Saving a compilation of multiple latent data
-            k_th = key_frame_list.index(frame_number) # the order of key frame in latent compilation
             latent_compiled[k_th] = new_feature_latent_data
-            torch.save(latent_compiled, os.path.join(args.model_path, "latent_dict_compiled.pth"))            
+            torch.save(latent_compiled, os.path.join(args.model_path, "latent_dict_compiled.pth"))
+            new_feature_latent_data_all = []
+            # update the next order for latent data 
+            if k_th + 1 < len(key_frame_list):
+                k_th += 1
+            else:
+                k_th = 0
+            
             
             '''
             ### Apply latent data on all frames
@@ -637,7 +692,23 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
             #t_diff_plus_h = abs(time_input-time_input_after)
             motion_loss = calculate_motion_loss(d_xyz_before, d_xyz_pred, d_xyz_after) #, t_diff_minus_h, t_diff_plus_h
             #motion_loss = 0.2
-            lambda_motion = 0.1
+            lambda_motion = 0.2
+            # KL Loss
+            #if frame_number == key_frame_before:
+            #    image1 = image_before
+            #else:
+            #    image1 = image_after
+            #image2 = image
+            # Ensure the images are non-negative and normalized to sum to 1
+            #image1 = torch.clamp(image1, min=1e-10) 
+            #image2 = torch.clamp(image2, min=1e-10)
+            #image1 = image1 / image1.sum()
+            #image2 = image2 / image2.sum()
+            # Flatten the images
+            #image1_flat = image1.view(-1)
+            #image2_flat = image2.view(-1)
+            # Calculate KL Divergence
+            #kl_loss = F.kl_div(image1_flat.log(), image2_flat, reduction='sum')
             kl_loss = 0
             lambda_kl = 0
             lambda_latent = 0
@@ -796,11 +867,11 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
             
             #### Existing one
             ## all frames
-            #latent_dict = torch.load(os.path.join(args.model_path, "latent_dict.pth"))
-            #new_feature_latent_data = latent_dict[f'frame_{frame_number}']
+            latent_dict = torch.load(os.path.join(args.model_path, "latent_dict.pth"))
+            new_feature_latent_data = latent_dict[f'frame_{frame_number}']
             ## key frames
-            new_feature_latent_data = torch.load(os.path.join(args.model_path, "latent_dict.pth"))
-            new_feature_latent_data = new_feature_latent_data[f'key_frame_{key_frame_before}_and_key_frame_{key_frame_after}']
+            #new_feature_latent_data = torch.load(os.path.join(args.model_path, "latent_dict.pth"))
+            #new_feature_latent_data = new_feature_latent_data[f'key_frame_{key_frame_before}_and_key_frame_{key_frame_after}']
             # If using all latent data
             new_feature_latent_data_all = torch.load(os.path.join(args.model_path, "latent_dict_compiled.pth"))
             new_feature_latent_data_all = new_feature_latent_data_all.to(device)
@@ -846,7 +917,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
             #t_diff_plus_h = abs(time_input-time_input_after)
             motion_loss = calculate_motion_loss(d_xyz_before, d_xyz_pred, d_xyz_after) #, t_diff_minus_h, t_diff_plus_h
             #motion_loss = 0
-            lambda_motion = 0.1
+            lambda_motion = 0.2
             lambda_latent = 0
             lpips_loss = loss_fn_vgg(image, gt_image).reshape(-1)
             lambda_lpips = 0.1
@@ -1019,7 +1090,7 @@ def training_report_with_prediction(tb_writer, iteration, Ll1, loss, l1_loss, el
         validation_configs = ({'name': 'test', 'cameras': scene.getTestCameras()},
                               {'name': 'train',
                                'cameras': [scene.getTrainCameras()[idx % len(scene.getTrainCameras())] for idx in
-                                           range(0, 7, 1)]}) #----------------------------------------------------------------------------------> UPDATE
+                                           range(0, 6, 1)]}) #----------------------------------------------------------------------------------> UPDATE
 
         for config in validation_configs:
             if config['cameras'] and len(config['cameras']) > 0:
@@ -1031,7 +1102,7 @@ def training_report_with_prediction(tb_writer, iteration, Ll1, loss, l1_loss, el
 
                 for idx, viewpoint in enumerate(config['cameras']):
                     
-                    if frame_number == 6 and config['name'] == 'train': #----------------------------------------------------------------------------------> UPDATE
+                    if frame_number == 10 and config['name'] == 'train': #----------------------------------------------------------------------------------> UPDATE
                         continue
 
                     
@@ -1085,31 +1156,34 @@ def training_report_with_prediction(tb_writer, iteration, Ll1, loss, l1_loss, el
                     ### Prediction
                     if using_latent:
                         if pretrain_latent:
-                            
+                            '''
                             # Using key frame
                             latent_dict = torch.load(os.path.join(args.model_path, "latent_dict.pth"))
                             new_feature_latent_data = latent_dict[f'key_frame_{key_frame_before}_and_key_frame_{key_frame_after}']
                             new_feature_latent_data = new_feature_latent_data.to(device)
                             new_feature_latent_data_all = []
                             '''
+
                             # Using all frames
                             latent_dict = torch.load(os.path.join(args.model_path, "latent_dict.pth"))
                             new_feature_latent_data = latent_dict[f'frame_{frame_number}']
                             new_feature_latent_data = new_feature_latent_data.to(device)
                             new_feature_latent_data_all = []
-                            '''
+                            
                         else:
-                            
+                            '''
                             # Using key frame
                             latent_dict = torch.load(os.path.join(args.model_path, "latent_dict.pth"))
                             new_feature_latent_data = latent_dict[f'key_frame_{key_frame_before}_and_key_frame_{key_frame_after}']
                             new_feature_latent_data = new_feature_latent_data.to(device)
                             '''
+                        
+                    
                             # Using all frames
                             latent_dict = torch.load(os.path.join(args.model_path, "latent_dict.pth"))
                             new_feature_latent_data = latent_dict[f'frame_{frame_number}']
                             new_feature_latent_data = new_feature_latent_data.to(device)
-                            '''
+                            
                             new_feature_latent_data_all = torch.load(os.path.join(args.model_path, "latent_dict_compiled.pth"))
                             new_feature_latent_data_all = new_feature_latent_data_all.to(device)
                     else:
