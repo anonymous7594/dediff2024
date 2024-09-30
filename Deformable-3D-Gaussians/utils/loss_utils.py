@@ -16,7 +16,7 @@ from math import exp
 #import numpy as np
 
 
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
 
 
 def l1_loss(network_output, gt):

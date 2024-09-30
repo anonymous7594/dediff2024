@@ -49,7 +49,7 @@ def render_set(model_path, load2gpu_on_the_fly, is_6dof, name, iteration, views,
     frame_number = 0
     total_frame = len(views)
     #print('Lenght of views: ',len(views))
-    h = 3 ### <--------------------------------------------------------------------------------------------------------------- MANUALLY UPDATED
+    h = 5 ### <--------------------------------------------------------------------------------------------------------------- MANUALLY UPDATED
 
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
         '''
@@ -117,21 +117,20 @@ def render_set(model_path, load2gpu_on_the_fly, is_6dof, name, iteration, views,
             
         ## Prediction
         #if using_latent:
+        
+        # using key frames only
+        #print('USING LATENT............... SUCCESSFULLY')
+        latent_dict = torch.load(os.path.join(args.model_path, "latent_dict.pth"))
+        new_feature_latent_data = latent_dict[f'key_frame_{key_frame_before}_and_key_frame_{key_frame_after}']
+        new_feature_latent_data = new_feature_latent_data.to(device)
+        #print('LOADING LATENT DATA..................SUCCESSFULLY')
         '''
-            # using key frames only
-            #print('USING LATENT............... SUCCESSFULLY')
-            latent_dict = torch.load(os.path.join(args.model_path, "latent_dict.pth"))
-            new_feature_latent_data = latent_dict[f'key_frame_{key_frame_before}_and_key_frame_{key_frame_after}']
-            new_feature_latent_data = new_feature_latent_data.to(device)
-            #print('LOADING LATENT DATA..................SUCCESSFULLY')
-            '''
-
-        new_feature_latent_data_all = torch.load(os.path.join(args.model_path, "latent_dict_compiled.pth"))
-        new_feature_latent_data_all = new_feature_latent_data_all.to(device)
-            
         # using all frames
         latent_dict = torch.load(os.path.join(args.model_path, "latent_dict.pth"))
         new_feature_latent_data = latent_dict[f'frame_{frame_number}']
+        '''
+        new_feature_latent_data_all = torch.load(os.path.join(args.model_path, "latent_dict_compiled.pth"))
+        new_feature_latent_data_all = new_feature_latent_data_all.to(device)       
             #print(new_feature_latent_data.size())
         #else:
             # using all frames
@@ -154,7 +153,7 @@ def render_set(model_path, load2gpu_on_the_fly, is_6dof, name, iteration, views,
         '''
         d_xyz, d_rotation, d_scaling, latent_loss = deform_predict.step(time_input, time_input_before, time_input_after, xyz.detach(),
                                                            d_xyz_before, d_xyz_after, new_feature_latent_data, new_feature_latent_data_all,
-                                                           d_xyz_pre, d_rotation_pre, d_scaling_pre) #(features_before, features_after)
+                                                           d_xyz_pre, d_rotation_pre, d_scaling_pre, view) #(features_before, features_after)
         #d_xyz, d_rotation, d_scaling = deform_predict.step(time_input+ast_noise, time_input_before, time_input_after, d_xyz_before, d_xyz_after, new_feature_latent_data) 
         #d_xyz, d_rotation, d_scaling = deform_predict.step(time_input, xyz.detach(), new_feature_latent_data)
         #d_xyz, d_rotation, d_scaling, h_input = deform.step(xyz.detach(), time_input)   

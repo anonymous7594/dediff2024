@@ -99,7 +99,7 @@ def evaluate(model_paths):
 
 
 if __name__ == "__main__":
-    device = torch.device("cuda:0")
+    device = torch.device("cuda:3")
     torch.cuda.set_device(device)
     #gpu = 1
     #os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu) #if not self.args.use_multi_gpu else self.args.devices

@@ -18,7 +18,7 @@ import torch.nn.functional as F
 import torch
 import torch.nn as nn
 
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
 
 def inverse_sigmoid(x):
     return torch.log(x / (1 - x))
@@ -192,10 +192,10 @@ def safe_state(silent):
 
     sys.stdout = F(silent)
 
-    random.seed(0)
-    np.random.seed(0)
-    torch.manual_seed(0)
-    torch.cuda.set_device(torch.device("cuda:0"))
+    #random.seed(0)
+    #np.random.seed(0)
+    #torch.manual_seed(0)
+    torch.cuda.set_device(torch.device("cuda:3"))
 
 
 ## UPDATE 13/06/2024 ##

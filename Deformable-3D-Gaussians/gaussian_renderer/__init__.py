@@ -18,7 +18,7 @@ from utils.rigid_utils import from_homogenous, to_homogenous
 
 
 
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
 CUDA_LAUNCH_BLOCKING=1
 
 

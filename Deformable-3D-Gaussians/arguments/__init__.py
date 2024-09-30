@@ -55,7 +55,7 @@ class ModelParams(ParamGroup):
         self._images = "images"
         self._resolution = -1
         self._white_background = False
-        self.data_device = "cuda:0"
+        self.data_device = "cuda:3"
         self.eval = False
         self.load2gpu_on_the_fly = False
         self.is_blender = False
@@ -91,7 +91,7 @@ class OptimizationParams(ParamGroup):
         self.rotation_lr = 0.001
         self.percent_dense = 0.01
         self.lambda_dssim = 0.2 ## 0.2 (original)
-        self.densification_interval = 100 ### the reason that the row size decrease every 100 iterations # 100
+        self.densification_interval = 300 ### the reason that the row size decrease every 100 iterations # 100 (original)
         self.opacity_reset_interval = 3000
         self.densify_from_iter = 500 # 500
         self.densify_until_iter = 25_000    #15_000 (original), 25_000
@@ -101,7 +101,7 @@ class OptimizationParams(ParamGroup):
         self.position_lr_final_predict = 0.0000016 # 0.0000016
         self.position_lr_delay_mult_predict = 0.01 #0.01
         self.predict_lr_max_steps = 40_000 #40_000
-        self.predict_lr_start_step = 10295 #0 (original), 11_000
+        self.predict_lr_start_step = 10000 #0 (original), 11_000
         # Feature Enhancement
         self.position_lr_init_fe = 0.016 #0.00016, 0.016, 0.16
         self.position_lr_final_fe = 0.0000016 # 0.0000016

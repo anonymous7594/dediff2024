@@ -35,7 +35,7 @@ try:
 except ImportError:
     TENSORBOARD_FOUND = False
 
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
 
 
 preprocess = transforms.Compose([
