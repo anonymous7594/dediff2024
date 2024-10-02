@@ -14,7 +14,7 @@ from diffusers import StableDiffusionXLImg2ImgPipeline
 import math
 
 
-device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     
 
 def get_embedder(multires, i=1):
@@ -255,11 +255,9 @@ class DiffusionModelLatent(nn.Module):
             #image_embedding_1 = output_1.last_hidden_state  # Token-level embeddings
             #pooled_image_embed_1 = output_1.pooler_output  # Pooled embedding
             # Image 2
-            output_2 = self.model_embedding.vision_model(image_ref_2).to(device)  #(**input_2)
+            output_2 = self.model_embedding.vision_model(image_ref_2)  #(**input_2)
             image_embedding_2 = output_2.last_hidden_state  # Token-level embeddings
-            image_embedding_2 = image_embedding_2.to(device)
             pooled_image_embed_2 = output_2.pooler_output  # Pooled embedding
-            pooled_image_embed_2 = pooled_image_embed_2.to(device)
 
         ## If conditioning on 2 images
         # Convert Embedding Size

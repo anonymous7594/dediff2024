@@ -36,7 +36,7 @@ try:
 except ImportError:
     TENSORBOARD_FOUND = False
 
-device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
 loss_fn_vgg = lpips.LPIPS(net='vgg').to(device)
@@ -105,7 +105,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
     
 
     ### DEFINE LOOP TIMESTEP
-    m_1 = 5000
+    m_1 = 10000
     m_2 = 1 # to determine training loops for feature_enhancement()
     m_3 = 1
     # Only key frames
@@ -345,7 +345,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
                     #deform_dict[f'key_frame_{key_frame_after}'] = features_after
                     #torch.save(deform_dict, os.path.join(args.model_path, 'deform_dict.pth'))
                 ## Current time
-                d_xyz_pre, d_rotation_pre, d_scaling_pre = deform.step(gaussians.get_xyz.detach(),time_input + ast_noise)
+                d_xyz_pre, d_rotation_pre, d_scaling_pre = deform.step(gaussians.get_xyz.detach(),time_input) # 
                 #d_xyz_pre, d_rotation_pre, d_scaling_pre = [], [], []
                 
             ### Load actual key frames image
@@ -353,7 +353,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
             features_after = viewpoint_cam_after.original_image.cuda()
                     
             ## Apply Diffusion Model to train feature_enhancement()
-            time_input =  time_input + ast_noise
+            time_input =  time_input #+ ast_noise
             time_dim = time_input[0,:]
             new_feature_latent_data = feature_enhancement.step(features_before, features_after, time_dim, viewpoint_cam)                            
             new_feature_latent_data = new_feature_latent_data.to(device)
@@ -408,7 +408,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
                 #d_xyz_before = 0.0
                 #d_xyz_after = 0.0
                 ## Apply Prediction model
-            d_xyz, d_rotation, d_scaling, loss_image_latent_encoding = deform_predict.step(time_input+ast_noise, time_input_before, time_input_after, gaussians.get_xyz.detach(), 
+            d_xyz, d_rotation, d_scaling, loss_image_latent_encoding = deform_predict.step(time_input + ast_noise, time_input_before, time_input_after, gaussians.get_xyz.detach(), 
                                                                                                     d_xyz_before, d_xyz_after, new_feature_latent_data, new_feature_latent_data_all,
                                                                                                     d_xyz_pre, d_rotation_pre, d_scaling_pre, viewpoint_cam)  #, viewpoint_cam
                     #d_xyz, d_rotation, d_scaling = deform_predict.step(time_input, gaussians.get_xyz.detach(), new_feature_latent_data)
@@ -432,7 +432,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
             lpips_loss = loss_fn_vgg(image, gt_image).reshape(-1)
             lambda_lpips = 0.05
             # Overall loss
-            loss = (1.0 - opt.lambda_dssim - lambda_motion - lambda_kl - lambda_l2) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) # L1 loss & dssim loss
+            #loss = (1.0 - opt.lambda_dssim - lambda_motion - lambda_kl - lambda_l2) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) # L1 loss & dssim loss
+            loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
             loss = loss + lambda_motion*motion_loss  # Motion loss
             loss = loss + lambda_kl*kl_loss # KL Loss
             #loss = loss + lambda_l2*Ll2 # L2 loss
@@ -482,7 +483,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
                 if iteration < opt.densify_until_iter:
                     gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
 
-                    if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
+                    if iteration > opt.densify_from_iter and iteration % opt.densification_interval_predict == 0:
                         size_threshold = 20 if iteration > opt.opacity_reset_interval else None
                         gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
 
@@ -599,14 +600,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
                 #deform_dict[f'key_frame_{key_frame_after}'] = features_after
                 #torch.save(deform_dict, os.path.join(args.model_path, 'deform_dict.pth'))
             ## Current timestep
-                d_xyz_pre, d_rotation_pre, d_scaling_pre = deform.step(gaussians.get_xyz.detach(),time_input+ast_noise)
+                d_xyz_pre, d_rotation_pre, d_scaling_pre = deform.step(gaussians.get_xyz.detach(),time_input) #+ast_noise
                 #d_xyz_pre, d_rotation_pre, d_scaling_pre = [], [], []
 
             features_before = viewpoint_cam_before.original_image.cuda()
             features_after = viewpoint_cam_after.original_image.cuda()
             
             ## Apply Diffusion Model to train feature_enhancement()
-            time_input = time_input + ast_noise
+            time_input = time_input #+ ast_noise
             time_dim = time_input[0,:]
             new_feature_latent_data = feature_enhancement.step(features_before, features_after, time_dim, viewpoint_cam)                                                                                 
             new_feature_latent_data = new_feature_latent_data.to(device)
@@ -674,7 +675,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
             lpips_loss = loss_fn_vgg(image, gt_image).reshape(-1)
             lambda_lpips = 0.05
             # Overall loss
-            loss = (1.0 - opt.lambda_dssim - lambda_motion - lambda_kl - lambda_l2) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) # L1 loss & dssim loss
+            #loss = (1.0 - opt.lambda_dssim - lambda_motion - lambda_kl - lambda_l2) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) # L1 loss & dssim 
+            loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
             loss = loss + lambda_motion*motion_loss  # Motion loss
             loss = loss + lambda_kl*kl_loss # KL Loss
             #loss = loss + lambda_l2*Ll2 # L2 loss
@@ -723,7 +725,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
                 if iteration < opt.densify_until_iter:
                     gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
 
-                    if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
+                    if iteration > opt.densify_from_iter and iteration % opt.densification_interval_predict == 0:
                         size_threshold = 20 if iteration > opt.opacity_reset_interval else None
                         gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
 
@@ -819,7 +821,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
                 ## Proceeding Key Frame -------------------------------------------
                 d_xyz_after, d_rotation_after, d_scaling_after = deform.step(gaussians.get_xyz.detach(),time_input_after)
                 ## Current timestep
-                d_xyz_pre, d_rotation_pre, d_scaling_pre = deform.step(gaussians.get_xyz.detach(),time_input+ast_noise)
+                d_xyz_pre, d_rotation_pre, d_scaling_pre = deform.step(gaussians.get_xyz.detach(),time_input) #+ast_noise
                 #d_xyz_pre, d_rotation_pre, d_scaling_pre = [], [], []
 
             ## Loading latent data
@@ -881,7 +883,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
             lpips_loss = loss_fn_vgg(image, gt_image).reshape(-1)
             lambda_lpips = 0.05
             # Overall loss
-            loss = (1.0 - opt.lambda_dssim - lambda_motion - lambda_l2) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) # L1 loss and dssim loss
+            #loss = (1.0 - opt.lambda_dssim - lambda_motion - lambda_l2) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) # L1 loss and dssim loss
+            loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
             loss = loss + lambda_motion*motion_loss  # Motion loss
             #loss = loss + lambda_l2*Ll2
             loss = loss + loss_image_latent_encoding*lambda_latent # Latent loss
@@ -928,7 +931,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations):
                 if iteration < opt.densify_until_iter:
                     gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
 
-                    if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
+                    if iteration > opt.densify_from_iter and iteration % opt.densification_interval_predict == 0:
                         size_threshold = 20 if iteration > opt.opacity_reset_interval else None
                         gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
 
